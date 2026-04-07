@@ -12,9 +12,11 @@
 // ── Event types ────────────────────────────────────────────────
 #define EVENT_PROCESS  1
 #define EVENT_CONNECT  2
+#define EVENT_LATENCY  3
 
 struct event {
     __u8  type;
+    __u8  _pad[3];        // explicit padding to align pid to 4-byte boundary
     __u32 pid;
     __u32 tgid;
     __u64 timestamp_ns;
@@ -28,6 +30,11 @@ struct event {
     __u32 daddr;
     __u16 sport;
     __u16 dport;
+
+    // latency events
+    __u64 latency_ns;
+    __u32 bytes;
+    __u32 _pad2;          // align struct to 8-byte boundary
 };
 
 // ── Maps ───────────────────────────────────────────────────────

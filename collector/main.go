@@ -10,7 +10,6 @@ import (
     "os"
     "os/signal"
 
-    "github.com/cilium/ebpf"
     "github.com/cilium/ebpf/link"
     "github.com/cilium/ebpf/ringbuf"
     "github.com/cilium/ebpf/rlimit"
@@ -19,7 +18,7 @@ import (
 // Must match the C struct layout exactly (packed, same field order)
 type Event struct {
     Type        uint8
-    _           [3]byte  // padding to align uint32
+    _           [3]byte // padding to align uint32
     Pid         uint32
     Tgid        uint32
     TimestampNs uint64
@@ -29,15 +28,19 @@ type Event struct {
     Daddr       uint32
     Sport       uint16
     Dport       uint16
+    LatencyNs   uint64
+    Bytes       uint32
+    _pad2       uint32 // align struct to 8-byte boundary
 }
 
 const (
     EventProcess = 1
     EventConnect = 2
+    EventLatency = 3
 )
 
 // $BPF_CLANG_CFLAGS and $BPF_CFLAGS are set by the Makefile
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang probes probes.bpf.c
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-g -O2 -D__TARGET_ARCH_x86" -target amd64 probes ../probes/probes.bpf.c -- -I../probes
 
 func main() {
     // Remove memlock limit — required for BPF maps on older kernels
@@ -113,6 +116,8 @@ func route(e *Event) {
         handleProcess(e)
     case EventConnect:
         handleConnect(e)
+    case EventLatency:
+        handleLatency(e)
     }
 }
 
@@ -132,6 +137,15 @@ func handleConnect(e *Event) {
     fmt.Printf("[CONN] pid=%-6d comm=%-16s %s:%d → %s:%d container=%s\n",
         e.Pid, nullStr(e.Comm[:]), src, e.Sport, dst, e.Dport, meta.ContainerID)
     // TODO: emit as OTLP span (trace TCP connection lifetime)
+}
+
+func handleLatency(e *Event) {
+    src := net.IP(int32ToBytes(e.Saddr))
+    dst := net.IP(int32ToBytes(e.Daddr))
+    latencyMs := float64(e.LatencyNs) / 1_000_000.0
+    fmt.Printf("[LAT]  pid=%-6d comm=%-16s %s:%d → %s:%d latency=%.3fms bytes=%d\n",
+        e.Pid, nullStr(e.Comm[:]), src, e.Sport, dst, e.Dport, latencyMs, e.Bytes)
+    // TODO: emit as OTLP histogram via MetricProcessor
 }
 
 // ProcMeta holds /proc-derived enrichment data
@@ -163,16 +177,3 @@ func int32ToBytes(n uint32) []byte {
     binary.LittleEndian.PutUint32(b, n)
     return b
 }
-
-// In main(), after setting up the ring buffer reader:
-
-proc, shutdown, err := processors.NewMetricProcessor(ctx, "localhost:4317")
-if err != nil {
-    log.Fatalf("init metric processor: %v", err)
-}
-defer shutdown()
-
-// In route():
-case EventLatency:
-    enriched := enricher.Enrich(event)   // adds PodName, Namespace, ContainerID
-    proc.Record(ctx, enriched)

@@ -1,0 +1,30 @@
+# Binaries
+collector
+*.exe
+
+# BPF generated files (regenerate with: make vmlinux.h && make generate)
+probes/vmlinux.h
+collector/probes_bpfel.go
+collector/probes_bpfeb.go
+collector/probes_bpfel.o
+collector/probes_bpfeb.o
+*.bpf.o
+
+# Go
+vendor/
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+
+# IDE / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
