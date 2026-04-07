@@ -50,7 +50,7 @@ build: generate
 
 # Run with required privileges
 run: build
-	sudo ./$(BINARY)
+	sudo ./$(COLLECTOR_DIR)/$(BINARY)
 
 # Clean generated files
 clean:
