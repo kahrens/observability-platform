@@ -1,0 +1,43 @@
+# ~/.config/containers/systemd/otel-collector.container
+#
+# Rootless Podman Quadlet unit for the OpenTelemetry Collector.
+# Managed by systemd via `systemctl --user`.
+#
+# After placing this file, run:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now otel-collector.service
+
+[Unit]
+Description=OpenTelemetry Collector
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+# Use the official OTel Collector "contrib" image which ships all receivers/exporters.
+# Pin to a specific digest in production instead of a floating tag.
+Image=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:latest
+
+# Bind-mount the collector config from the user's home directory (read-only).
+Volume=%h/.config/otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro,z
+
+# Expose OTLP gRPC on port 4317.
+# Rootless Podman maps this to the same host port via pasta/slirp4netns.
+PublishPort=4317:4317
+
+# Keep logs going to the journal (default) — the debug exporter also writes there.
+LogDriver=journald
+
+# Drop all Linux capabilities; the collector doesn't need any.
+DropCapability=ALL
+NoNewPrivileges=true
+
+# Optional: cap memory if you want to protect the host.
+# Memory=256m
+
+[Service]
+# Restart on failure with a short back-off.
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target

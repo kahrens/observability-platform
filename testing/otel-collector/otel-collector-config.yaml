@@ -1,0 +1,74 @@
+# ~/.config/otelcol/config.yaml
+#
+# OpenTelemetry Collector configuration.
+# Receives OTLP over gRPC on port 4317 and exports to the debug exporter
+# (stdout / journal via the container's log driver).
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        # Listen on all interfaces inside the container.
+        endpoint: "0.0.0.0:4317"
+
+exporters:
+  # The debug exporter prints telemetry to stdout (captured by journald).
+  # verbosity: basic    → one summary line per batch
+  # verbosity: normal   → includes attribute keys/values
+  # verbosity: detailed → full data including every data point / span event
+  debug:
+    verbosity: normal
+    sampling_initial:   5   # log first 5 records immediately
+    sampling_thereafter: 20 # then log 1-in-20 to avoid flooding the journal
+
+  # Uncomment the block below to ALSO write to a file inside the container.
+  # You would then add "file" to the exporters list in the pipeline.
+  #
+  # file:
+  #   path: /var/log/otelcol/output.json
+  #   rotation:
+  #     max_megabytes: 50
+  #     max_days: 7
+  #     max_backups: 3
+
+processors:
+  # batch improves throughput and is recommended for almost all pipelines.
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+  # memory_limiter prevents OOM kills; tune to ~80 % of the container Memory= cap.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+
+service:
+  pipelines:
+    traces:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [debug]
+
+    metrics:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [debug]
+
+    logs:
+      receivers:  [otlp]
+      processors: [memory_limiter, batch]
+      exporters:  [debug]
+
+  # Expose the collector's own health / telemetry on localhost only.
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      level: basic
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "127.0.0.1"
+                port: 8888
