@@ -44,8 +44,10 @@ const (
 
 var logProc *processors.LogProcessor
 
-// $BPF_CLANG_CFLAGS and $BPF_CFLAGS are set by the Makefile
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-g -O2 -D__TARGET_ARCH_x86" -target amd64 probes ../probes/probes.bpf.c -- -I../probes
+// bpf2go compiles probes.bpf.c for each target and generates Go bindings with
+// matching build constraints.  -D__TARGET_ARCH_xxx is injected automatically
+// by bpf2go per target, so it must not be set here.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -cc clang -cflags "-g -O2" -target amd64,arm64 probes ../probes/probes.bpf.c -- -I../probes
 
 func main() {
 	// Remove memlock limit — required for BPF maps on older kernels

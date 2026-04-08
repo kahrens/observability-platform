@@ -1,6 +1,8 @@
 # Makefile
 CLANG    := clang
-CFLAGS   := -g -O2 -target bpf -D__TARGET_ARCH_x86
+# Detect host arch and map to the name expected by bpf_tracing.h
+ARCH     := $(shell uname -m | sed 's/x86_64/x86/;s/aarch64/arm64/')
+CFLAGS   := -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH)
 INCLUDES := -I/usr/include/bpf
 
 all: vmlinux.h probes.bpf.o generate build
