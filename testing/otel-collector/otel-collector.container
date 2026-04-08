@@ -16,6 +16,7 @@ Wants=network-online.target
 # Use the official OTel Collector "contrib" image which ships all receivers/exporters.
 # Pin to a specific digest in production instead of a floating tag.
 Image=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:latest
+ContainerName=otel-collector
 
 # Bind-mount the collector config from the user's home directory (read-only).
 Volume=%h/.config/otelcol/config.yaml:/etc/otelcol-contrib/config.yaml:ro,z
