@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"time"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/log"
@@ -69,8 +70,19 @@ func NewLogProcessor(ctx context.Context) (*LogProcessor, func(context.Context) 
 		nil
 }
 
+// safeStr replaces invalid UTF-8 sequences with the replacement character
+// so OTLP gRPC marshalling never fails on kernel-sourced byte strings.
+func safeStr(s string) string {
+	if utf8.ValidString(s) {
+		return s
+	}
+	return string([]rune(s))
+}
+
 // ProcessExec emits a log record for a process execution event.
 func (lp *LogProcessor) ProcessExec(ctx context.Context, e ExecEvent) {
+	e.Comm = safeStr(e.Comm)
+	e.Filename = safeStr(e.Filename)
 	var r log.Record
 	r.SetTimestamp(time.Unix(0, int64(e.TimestampNs)))
 	r.SetObservedTimestamp(time.Now())
@@ -91,6 +103,6 @@ func (lp *LogProcessor) ProcessExec(ctx context.Context, e ExecEvent) {
 		attrs = append(attrs, log.String("container.id", cid))
 	}
 	r.AddAttributes(attrs...)
-
+	fmt.Printf("[PROCESS-DEBUG] pid=%d comm=%s file=%s\n", e.Pid, e.Comm, e.Filename)
 	lp.logger.Emit(ctx, r)
 }
