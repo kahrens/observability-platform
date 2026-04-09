@@ -8,7 +8,7 @@ is Fedora 42 (kernel 6.14+), validated against AlmaLinux 9 for RHEL parity.
 
 ## Current state
 Early development. Architecture designed, starter code scaffolded.
-Not yet building or running. Start here before writing any new code.
+Project as-is builds and runs. The current functionality is a single use case that records new process exec data and emits OTel logs with it.  Code will build and run on x86_64 and arm64. Start here before writing any new code.
 
 ## Architecture (read docs/architecture.md for full detail and
 docs/platform_architecture_overview.svg)
