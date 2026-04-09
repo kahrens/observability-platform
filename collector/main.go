@@ -21,9 +21,10 @@ import (
 // Must match the C struct layout exactly (packed, same field order)
 type Event struct {
 	Type        uint8
-	Pad0        [3]byte // padding to align uint32
+	Pad0        [3]byte // matches C: _pad[3]
 	Pid         uint32
 	Tgid        uint32
+	Pad1        uint32  // matches C: _pad1 (aligns timestamp_ns to 8 bytes)
 	TimestampNs uint64
 	Comm        [16]byte
 	Filename    [128]byte
@@ -31,9 +32,10 @@ type Event struct {
 	Daddr       uint32
 	Sport       uint16
 	Dport       uint16
+	Pad2        uint32  // matches C: _pad2 (aligns latency_ns to 8 bytes)
 	LatencyNs   uint64
 	Bytes       uint32
-	Pad1        uint32 // align struct to 8-byte boundary
+	Pad3        uint32  // matches C: _pad3 (aligns struct to 8 bytes)
 }
 
 const (

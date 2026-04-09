@@ -20,6 +20,7 @@ struct event {
     __u8  _pad[3];        // explicit padding to align pid to 4-byte boundary
     __u32 pid;
     __u32 tgid;
+    __u32 _pad1;          // explicit: align timestamp_ns to 8-byte boundary
     __u64 timestamp_ns;
     char  comm[16];
 
@@ -31,12 +32,15 @@ struct event {
     __u32 daddr;
     __u16 sport;
     __u16 dport;
+    __u32 _pad2;          // explicit: align latency_ns to 8-byte boundary
 
     // latency events
     __u64 latency_ns;
     __u32 bytes;
-    __u32 _pad2;          // align struct to 8-byte boundary
+    __u32 _pad3;          // align struct to 8-byte boundary
 };
+
+_Static_assert(sizeof(struct event) == 200, "struct event size mismatch — update Go Event struct");
 
 // ── Maps ───────────────────────────────────────────────────────
 
