@@ -19,6 +19,8 @@ import (
 // ExecEvent carries the fields from an execve BPF event needed to emit a log record.
 type ExecEvent struct {
 	Pid         uint32
+	Uid         uint32
+	Gid         uint32
 	TimestampNs uint64
 	Comm        string
 	Filename    string
@@ -88,10 +90,12 @@ func (lp *LogProcessor) ProcessExec(ctx context.Context, e ExecEvent) {
 	r.SetObservedTimestamp(time.Now())
 	r.SetSeverity(log.SeverityInfo)
 	r.SetSeverityText("INFO")
-	r.SetBody(log.StringValue(fmt.Sprintf("exec pid=%d comm=%s file=%s", e.Pid, e.Comm, e.Filename)))
+	r.SetBody(log.StringValue(fmt.Sprintf("exec pid=%d uid=%d gid=%d comm=%s file=%s", e.Pid, e.Uid, e.Gid, e.Comm, e.Filename)))
 
 	attrs := []log.KeyValue{
 		log.Int64("process.pid", int64(e.Pid)),
+		log.Int64("process.user.id", int64(e.Uid)),
+		log.Int64("process.group.id", int64(e.Gid)),
 		log.String("process.executable.name", e.Comm),
 		log.String("process.executable.path", e.Filename),
 	}
@@ -103,6 +107,5 @@ func (lp *LogProcessor) ProcessExec(ctx context.Context, e ExecEvent) {
 		attrs = append(attrs, log.String("container.id", cid))
 	}
 	r.AddAttributes(attrs...)
-	fmt.Printf("[PROCESS-DEBUG] pid=%d comm=%s file=%s\n", e.Pid, e.Comm, e.Filename)
 	lp.logger.Emit(ctx, r)
 }

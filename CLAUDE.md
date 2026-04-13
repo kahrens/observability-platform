@@ -25,12 +25,19 @@ Three tiers:
 - Event transport: BPF_MAP_TYPE_RINGBUF (not perf event array)
 - Metrics SDK: go.opentelemetry.io/otel/sdk/metric with OTLP/gRPC exporter
 - Trace SDK: go.opentelemetry.io/otel/sdk/trace with explicit start/end timestamps
+- Log SDK: go.opentelemetry.io/otel/sdk/log with OTLP/gRPC exporter
 - Histogram buckets for TCP latency: [0.1,0.5,1,5,10,25,50,100,250,500,1000,2500,5000] ms
 
 ## Correlation key design
 Connections are keyed by {pid u32, fd u32} in BPF maps.
 fd reuse is handled by using open_ts_ns as a generation counter in Go-side maps.
 See docs/ebpf-patterns.md for the full pattern.
+
+## Topology and Service Map
+Run eBPF probes on multiple servers.  Ship connection information to trace
+data store.  Use 5-tuples to join the source->destination and destination->source
+into distributed traces with spans.  This can be used to build a service map and show
+application topology.
 
 ## HTTP trace reconstruction approach
 Capture write()/read() syscall exit tracepoints.
