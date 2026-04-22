@@ -6,9 +6,6 @@
 #define __COMMON_H
 
 #include <stdbool.h>
-#include <linux/types.h>
-#include <linux/in.h>
-#include <linux/in6.h>
 
 // Defines
 

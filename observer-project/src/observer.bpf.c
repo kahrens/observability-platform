@@ -78,7 +78,7 @@ struct {
 struct {
     __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
     __uint(max_entries, 1);
-    __type(key, __u64);
+    __type(key, __u32);
     __type(value, struct socket_data_event_t);
 } socket_data_event_buffer_heap SEC(".maps");
 
@@ -336,6 +336,7 @@ int syscall__probe_entry_accept(struct pt_regs* ctx, int sockfd, struct sockaddr
     struct accept_args_t accept_args = {};
     accept_args.addr = (struct sockaddr_in *)addr;
     bpf_map_update_elem(&active_accept_args_map, &id, &accept_args, BPF_ANY);
+    bpf_printk("Update active accept args map with %pi4", addr);
 
     return 0;
 }
@@ -350,6 +351,7 @@ int syscall__probe_ret_accept(struct pt_regs* ctx) {
     }
 
     bpf_map_delete_elem(&active_accept_args_map, &id);
+    bpf_printk("Deleting from active accept args map");
     return 0;
 }
 
