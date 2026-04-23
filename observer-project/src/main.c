@@ -25,8 +25,8 @@ const char argp_program_doc[] = "Linux Observer application.\n"
 				"USAGE: ./observe\n";
 
 static const struct argp_option opts[] = {
-	{ "verbose", 'v', NULL, 0, "Verbose debug output" },
-	{ "duration", 'd', "DURATION-MS", 0, "Minimum process duration (ms) to report" },
+	{ "verbose", 'v', NULL, 0, "Verbose debug output", 0 },
+	{ "duration", 'd', "DURATION-MS", 0, "Minimum process duration (ms) to report", 0 },
 	{},
 };
 

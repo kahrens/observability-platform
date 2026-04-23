@@ -329,7 +329,8 @@ static inline __attribute__((__always_inline__)) void process_data(struct pt_reg
 }
 
 // Hooks
-int syscall__probe_entry_accept(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
+SEC("tracepoint/syscall/sys_enter_accept")
+int sys_enter_accept(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Keep the addr in a map to use during the exit method.
@@ -341,7 +342,8 @@ int syscall__probe_entry_accept(struct pt_regs* ctx, int sockfd, struct sockaddr
     return 0;
 }
 
-int syscall__probe_ret_accept(struct pt_regs* ctx) {
+SEC("tracepoint/syscall/sys_exit_accept")
+int sys_exit_accept(struct pt_regs* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Pulling the addr from the map.
@@ -358,7 +360,8 @@ int syscall__probe_ret_accept(struct pt_regs* ctx) {
 
 // Hooking the entry of accept4
 // the signature of the syscall is int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-int syscall__probe_entry_accept4(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
+SEC("tracepoint/syscall/sys_enter_accept4")
+int sys_enter_accept4(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
     // Getting a unique ID for the relevant thread in the relevant pid.
     // That way we can link different calls from the same thread.
     uint64_t id = bpf_get_current_pid_tgid();
@@ -372,7 +375,8 @@ int syscall__probe_entry_accept4(struct pt_regs* ctx, int sockfd, struct sockadd
 }
 
 // Hooking the exit of accept4
-int syscall__probe_ret_accept4(struct pt_regs* ctx) {
+SEC("tracepoint/syscall/sys_exit_accept4")
+int sys_exit_accept4(struct pt_regs* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Pulling the addr from the map.
@@ -389,7 +393,8 @@ int syscall__probe_ret_accept4(struct pt_regs* ctx) {
 }
 
 // original signature: ssize_t write(int fd, const void *buf, size_t count);
-int syscall__probe_entry_write(struct pt_regs* ctx, int fd, char* buf, size_t count) {
+SEC("tracepoint/syscall/sys_enter_write")
+int sys_enter_write(struct pt_regs* ctx, int fd, char* buf, size_t count) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     struct data_args_t write_args = {};
@@ -400,7 +405,8 @@ int syscall__probe_entry_write(struct pt_regs* ctx, int fd, char* buf, size_t co
     return 0;
 }
 
-int syscall__probe_ret_write(struct pt_regs* ctx) {
+SEC("tracepoint/syscall/sys_exit_write")
+int sys_exit_write(struct pt_regs* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     ssize_t bytes_count = PT_REGS_RC(ctx); // Also stands for return code.
 
@@ -415,7 +421,8 @@ int syscall__probe_ret_write(struct pt_regs* ctx) {
 }
 
 // original signature: ssize_t read(int fd, void *buf, size_t count);
-int syscall__probe_entry_read(struct pt_regs* ctx, int fd, char* buf, size_t count) {
+SEC("tracepoint/syscall/sys_enter_read")
+int sys_enter_read(struct pt_regs* ctx, int fd, char* buf, size_t count) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Stash arguments.
@@ -427,7 +434,8 @@ int syscall__probe_entry_read(struct pt_regs* ctx, int fd, char* buf, size_t cou
     return 0;
 }
 
-int syscall__probe_ret_read(struct pt_regs* ctx) {
+SEC("tracepoint/syscall/sys_exit_read")
+int sys_exit_read(struct pt_regs* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // The return code the syscall is the number of bytes read as well.
@@ -443,7 +451,8 @@ int syscall__probe_ret_read(struct pt_regs* ctx) {
     return 0;
 }
 // original signature: int close(int fd)
-int syscall__probe_entry_close(struct pt_regs* ctx, int fd) {
+SEC("tracepoint/syscall/sys_enter_close")
+int sys_enter_close(struct pt_regs* ctx, int fd) {
     uint64_t id = bpf_get_current_pid_tgid();
     struct close_args_t close_args;
     close_args.fd = fd;
@@ -452,7 +461,8 @@ int syscall__probe_entry_close(struct pt_regs* ctx, int fd) {
     return 0;
 }
 
-int syscall__probe_ret_close(struct pt_regs* ctx) {
+SEC("tracepoint/syscall/sys_exit_close")
+int sys_exit_close(struct pt_regs* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     const struct close_args_t* close_args = bpf_map_lookup_elem(&active_close_args_map, &id);
     if (close_args != NULL) {
