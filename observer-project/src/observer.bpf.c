@@ -116,10 +116,10 @@ static __inline uint64_t gen_tgid_fd(uint32_t tgid, int fd) {
 
 // An helper function that checks if the syscall finished successfully and if it did
 // saves the new connection in a dedicated map of connections
-static __inline void process_syscall_accept(struct pt_regs* ctx, uint64_t id, const struct accept_args_t* args) {
+static __inline void process_syscall_accept(struct trace_event_raw_sys_exit* ctx, uint64_t id, const struct accept_args_t* args) {
     // Extracting the return code, and checking if it represent a failure,
     // if it does, we abort the as we have nothing to do.
-    int ret_fd = PT_REGS_RC(ctx);
+    int ret_fd = (int)ctx->ret;
     if (ret_fd <= 0) {
         return;
     }
@@ -147,12 +147,12 @@ static __inline void process_syscall_accept(struct pt_regs* ctx, uint64_t id, co
     open_event->timestamp_ns = bpf_ktime_get_ns();
     open_event->conn_id = conn_info.conn_id;
 	bpf_probe_read(&open_event->addr, sizeof(open_event->addr), args->addr);
-    bpf_ringbuf_submit(&socket_open_events, 0);
+    bpf_ringbuf_submit(open_event, 0);
 }
 
-static inline __attribute__((__always_inline__)) void process_syscall_close(struct pt_regs* ctx, uint64_t id,
+static inline __attribute__((__always_inline__)) void process_syscall_close(struct trace_event_raw_sys_exit* ctx, uint64_t id,
                                                                             const struct close_args_t* close_args) {
-    int ret_val = PT_REGS_RC(ctx);
+    int ret_val = (int)ctx->ret;
     if (ret_val < 0) {
         return;
     }
@@ -189,14 +189,19 @@ static inline __attribute__((__always_inline__)) bool is_http_connection(struct 
         return false;
     }
 
+    char prefix[4];
+    if (bpf_probe_read(prefix, sizeof(prefix), buf) < 0) {
+        return false;
+    }
+
     bool res = false;
-    if (buf[0] == 'H' && buf[1] == 'T' && buf[2] == 'T' && buf[3] == 'P') {
+    if (prefix[0] == 'H' && prefix[1] == 'T' && prefix[2] == 'T' && prefix[3] == 'P') {
         res = true;
     }
-    if (buf[0] == 'G' && buf[1] == 'E' && buf[2] == 'T') {
+    if (prefix[0] == 'G' && prefix[1] == 'E' && prefix[2] == 'T') {
         res = true;
     }
-    if (buf[0] == 'P' && buf[1] == 'O' && buf[2] == 'S' && buf[3] == 'T') {
+    if (prefix[0] == 'P' && prefix[1] == 'O' && prefix[2] == 'S' && prefix[3] == 'T') {
         res = true;
     }
 
@@ -207,7 +212,7 @@ static inline __attribute__((__always_inline__)) bool is_http_connection(struct 
     return res;
 }
 
-static __inline void perf_submit_buf(struct pt_regs* ctx, const enum traffic_direction_t direction,
+static __inline void perf_submit_buf(struct trace_event_raw_sys_exit* ctx, const enum traffic_direction_t direction,
                                      const char* buf, size_t buf_size, size_t offset,
                                      struct conn_info_t* conn_info) {
 
@@ -236,14 +241,13 @@ static __inline void perf_submit_buf(struct pt_regs* ctx, const enum traffic_dir
     // code, clang has to discard any assumptions on what values this variable can take.
     asm volatile("" : "+r"(buf_size_minus_1) :);
 
-    buf_size = buf_size_minus_1 + 1;
-
-    // 4.14 kernels reject bpf_probe_read with size that they may think is zero.
-    // Without the if statement, it somehow can't reason that the bpf_probe_read is non-zero.
+    // Compute buf_size inside each branch so the verifier can prove it is bounded.
+    // Computing it before the check (from the asm-tainted buf_size_minus_1) leaves it
+    // as an unbounded scalar and bpf_probe_read rejects the load.
     size_t amount_copied = 0;
     if (buf_size_minus_1 < MAX_MSG_SIZE) {
-        bpf_probe_read(&event->msg, buf_size, buf);
-        amount_copied = buf_size;
+        bpf_probe_read(&event->msg, buf_size_minus_1 + 1, buf);
+        amount_copied = buf_size_minus_1 + 1;
     } else {
         bpf_probe_read(&event->msg, MAX_MSG_SIZE, buf);
         amount_copied = MAX_MSG_SIZE;
@@ -260,7 +264,7 @@ static __inline void perf_submit_buf(struct pt_regs* ctx, const enum traffic_dir
     }
 }
 
-static __inline void perf_submit_wrapper(struct pt_regs* ctx,
+static __inline void perf_submit_wrapper(struct trace_event_raw_sys_exit* ctx,
                                          const enum traffic_direction_t direction, const char* buf,
                                          const size_t buf_size, struct conn_info_t* conn_info,
                                          struct socket_data_event_t* event) {
@@ -278,7 +282,7 @@ static __inline void perf_submit_wrapper(struct pt_regs* ctx,
     }
 }
 
-static inline __attribute__((__always_inline__)) void process_data(struct pt_regs* ctx, uint64_t id,
+static inline __attribute__((__always_inline__)) void process_data(struct trace_event_raw_sys_exit* ctx, uint64_t id,
                                                                    enum traffic_direction_t direction,
                                                                    const struct data_args_t* args, ssize_t bytes_count) {
     // Always check access to pointer before accessing them.
@@ -330,8 +334,11 @@ static inline __attribute__((__always_inline__)) void process_data(struct pt_reg
 
 // Hooks
 SEC("tracepoint/syscall/sys_enter_accept")
-int sys_enter_accept(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
+int sys_enter_accept(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
+
+    // Pull the addr argument from the tracepoint context
+    struct sockaddr* addr = (struct sockaddr*)ctx->args[1];
 
     // Keep the addr in a map to use during the exit method.
     struct accept_args_t accept_args = {};
@@ -343,7 +350,7 @@ int sys_enter_accept(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, soc
 }
 
 SEC("tracepoint/syscall/sys_exit_accept")
-int sys_exit_accept(struct pt_regs* ctx) {
+int sys_exit_accept(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Pulling the addr from the map.
@@ -361,10 +368,14 @@ int sys_exit_accept(struct pt_regs* ctx) {
 // Hooking the entry of accept4
 // the signature of the syscall is int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 SEC("tracepoint/syscall/sys_enter_accept4")
-int sys_enter_accept4(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, socklen_t* addrlen) {
+int sys_enter_accept4(struct trace_event_raw_sys_enter* ctx) {
+    
     // Getting a unique ID for the relevant thread in the relevant pid.
     // That way we can link different calls from the same thread.
     uint64_t id = bpf_get_current_pid_tgid();
+
+    // Pull the addr argument from the tracepoint context
+    struct sockaddr* addr = (struct sockaddr*)ctx->args[1];
 
     // Keep the addr in a map to use during the accpet4 exit hook.
     struct accept_args_t accept_args = {};
@@ -376,7 +387,7 @@ int sys_enter_accept4(struct pt_regs* ctx, int sockfd, struct sockaddr* addr, so
 
 // Hooking the exit of accept4
 SEC("tracepoint/syscall/sys_exit_accept4")
-int sys_exit_accept4(struct pt_regs* ctx) {
+int sys_exit_accept4(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Pulling the addr from the map.
@@ -394,21 +405,21 @@ int sys_exit_accept4(struct pt_regs* ctx) {
 
 // original signature: ssize_t write(int fd, const void *buf, size_t count);
 SEC("tracepoint/syscall/sys_enter_write")
-int sys_enter_write(struct pt_regs* ctx, int fd, char* buf, size_t count) {
+int sys_enter_write(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     struct data_args_t write_args = {};
-    write_args.fd = fd;
-    write_args.buf = buf;
+    write_args.fd = (int)ctx->args[0];
+    write_args.buf = (char*)ctx->args[1];
     bpf_map_update_elem(&active_write_args_map, &id, &write_args, BPF_ANY);
 
     return 0;
 }
 
 SEC("tracepoint/syscall/sys_exit_write")
-int sys_exit_write(struct pt_regs* ctx) {
+int sys_exit_write(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
-    ssize_t bytes_count = PT_REGS_RC(ctx); // Also stands for return code.
+    ssize_t bytes_count = (ssize_t)ctx->ret;
 
     // Unstash arguments, and process syscall.
     struct data_args_t* write_args = bpf_map_lookup_elem(&active_write_args_map, &id);
@@ -422,24 +433,24 @@ int sys_exit_write(struct pt_regs* ctx) {
 
 // original signature: ssize_t read(int fd, void *buf, size_t count);
 SEC("tracepoint/syscall/sys_enter_read")
-int sys_enter_read(struct pt_regs* ctx, int fd, char* buf, size_t count) {
+int sys_enter_read(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // Stash arguments.
     struct data_args_t read_args = {};
-    read_args.fd = fd;
-    read_args.buf = buf;
+    read_args.fd = (int)ctx->args[0];
+    read_args.buf = (char*)ctx->args[1];
     bpf_map_update_elem(&active_read_args_map, &id, &read_args, BPF_ANY);
 
     return 0;
 }
 
 SEC("tracepoint/syscall/sys_exit_read")
-int sys_exit_read(struct pt_regs* ctx) {
+int sys_exit_read(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
     // The return code the syscall is the number of bytes read as well.
-    ssize_t bytes_count = PT_REGS_RC(ctx);
+    ssize_t bytes_count = (int)ctx->ret;
     struct data_args_t* read_args = bpf_map_lookup_elem(&active_read_args_map, &id);
     if (read_args != NULL) {
         // kIngress is an enum value that let's the process_data function
@@ -452,17 +463,17 @@ int sys_exit_read(struct pt_regs* ctx) {
 }
 // original signature: int close(int fd)
 SEC("tracepoint/syscall/sys_enter_close")
-int sys_enter_close(struct pt_regs* ctx, int fd) {
+int sys_enter_close(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     struct close_args_t close_args;
-    close_args.fd = fd;
+    close_args.fd = (int)ctx->args[0];
     bpf_map_update_elem(&active_close_args_map, &id, &close_args, BPF_ANY);
 
     return 0;
 }
 
 SEC("tracepoint/syscall/sys_exit_close")
-int sys_exit_close(struct pt_regs* ctx) {
+int sys_exit_close(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     const struct close_args_t* close_args = bpf_map_lookup_elem(&active_close_args_map, &id);
     if (close_args != NULL) {
