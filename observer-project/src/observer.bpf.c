@@ -167,12 +167,17 @@ static inline __attribute__((__always_inline__)) void process_syscall_close(stru
 
     // Send to the user mode an event indicating the connection was closed.
     struct socket_close_event_t *close_event = bpf_ringbuf_reserve(&socket_close_events, sizeof(struct socket_close_event_t), 0);
+    if (close_event == NULL) {
+        // If we can't reserve space in the ring buffer, we can't send the event, but
+        // we can still keep tracking the connection, so we just return.
+        return;
+    }
     close_event->timestamp_ns = bpf_ktime_get_ns();
     close_event->conn_id = conn_info->conn_id;
     close_event->rd_bytes = conn_info->rd_bytes;
     close_event->wr_bytes = conn_info->wr_bytes;
 
-    bpf_ringbuf_submit(&socket_close_events, 0);
+    bpf_ringbuf_submit(close_event, 0);
 
     // Remove the connection from the mapping.
     bpf_map_delete_elem(&conn_info_map, &tgid_fd);
@@ -333,7 +338,7 @@ static inline __attribute__((__always_inline__)) void process_data(struct trace_
 }
 
 // Hooks
-SEC("tracepoint/syscall/sys_enter_accept")
+SEC("tracepoint/syscalls/sys_enter_accept")
 int sys_enter_accept(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
@@ -349,7 +354,7 @@ int sys_enter_accept(struct trace_event_raw_sys_enter* ctx) {
     return 0;
 }
 
-SEC("tracepoint/syscall/sys_exit_accept")
+SEC("tracepoint/syscalls/sys_exit_accept")
 int sys_exit_accept(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
@@ -367,7 +372,7 @@ int sys_exit_accept(struct trace_event_raw_sys_exit* ctx) {
 
 // Hooking the entry of accept4
 // the signature of the syscall is int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-SEC("tracepoint/syscall/sys_enter_accept4")
+SEC("tracepoint/syscalls/sys_enter_accept4")
 int sys_enter_accept4(struct trace_event_raw_sys_enter* ctx) {
     
     // Getting a unique ID for the relevant thread in the relevant pid.
@@ -386,7 +391,7 @@ int sys_enter_accept4(struct trace_event_raw_sys_enter* ctx) {
 }
 
 // Hooking the exit of accept4
-SEC("tracepoint/syscall/sys_exit_accept4")
+SEC("tracepoint/syscalls/sys_exit_accept4")
 int sys_exit_accept4(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
@@ -403,8 +408,9 @@ int sys_exit_accept4(struct trace_event_raw_sys_exit* ctx) {
     return 0;
 }
 
+/****
 // original signature: ssize_t write(int fd, const void *buf, size_t count);
-SEC("tracepoint/syscall/sys_enter_write")
+SEC("tracepoint/syscalls/sys_enter_write")
 int sys_enter_write(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
@@ -416,7 +422,7 @@ int sys_enter_write(struct trace_event_raw_sys_enter* ctx) {
     return 0;
 }
 
-SEC("tracepoint/syscall/sys_exit_write")
+SEC("tracepoint/syscalls/sys_exit_write")
 int sys_exit_write(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     ssize_t bytes_count = (ssize_t)ctx->ret;
@@ -432,7 +438,7 @@ int sys_exit_write(struct trace_event_raw_sys_exit* ctx) {
 }
 
 // original signature: ssize_t read(int fd, void *buf, size_t count);
-SEC("tracepoint/syscall/sys_enter_read")
+SEC("tracepoint/syscalls/sys_enter_read")
 int sys_enter_read(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
@@ -445,7 +451,7 @@ int sys_enter_read(struct trace_event_raw_sys_enter* ctx) {
     return 0;
 }
 
-SEC("tracepoint/syscall/sys_exit_read")
+SEC("tracepoint/syscalls/sys_exit_read")
 int sys_exit_read(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
 
@@ -461,8 +467,10 @@ int sys_exit_read(struct trace_event_raw_sys_exit* ctx) {
     bpf_map_delete_elem(&active_read_args_map, &id);
     return 0;
 }
+****/
+
 // original signature: int close(int fd)
-SEC("tracepoint/syscall/sys_enter_close")
+SEC("tracepoint/syscalls/sys_enter_close")
 int sys_enter_close(struct trace_event_raw_sys_enter* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     struct close_args_t close_args;
@@ -472,7 +480,7 @@ int sys_enter_close(struct trace_event_raw_sys_enter* ctx) {
     return 0;
 }
 
-SEC("tracepoint/syscall/sys_exit_close")
+SEC("tracepoint/syscalls/sys_exit_close")
 int sys_exit_close(struct trace_event_raw_sys_exit* ctx) {
     uint64_t id = bpf_get_current_pid_tgid();
     const struct close_args_t* close_args = bpf_map_lookup_elem(&active_close_args_map, &id);

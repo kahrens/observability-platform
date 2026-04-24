@@ -84,7 +84,7 @@ static int handle_open(void *ctx, void *data, size_t data_sz)
 	tm = localtime(&t);
 	strftime(ts, sizeof(ts), "%H:%M:%S", tm);
 
-	printf("%-8s %-5s %-16lld %-7d %-7d %-16lld %-15s", ts, "OPEN ", e->timestamp_ns, e->conn_id.pid, e->conn_id.fd,
+	printf("%-8s %-5s %-16lld %-7d %-7d %-16lld %-15s\n", ts, "OPEN ", e->timestamp_ns, e->conn_id.pid, e->conn_id.fd,
 			e->conn_id.tsid, inet_ntoa(e->addr.sin_addr));
 
 	return 0;
@@ -101,7 +101,7 @@ static int handle_close(void *ctx, void *data, size_t data_sz)
 	tm = localtime(&t);
 	strftime(ts, sizeof(ts), "%H:%M:%S", tm);
 
-	printf("%-8s %-5s %-16lld %-7d %-7d %-16lld %-9lld %-9lld", ts, "CLOSE", e->timestamp_ns, e->conn_id.pid, e->conn_id.fd,
+	printf("%-8s %-5s %-16lld %-7d %-7d %-16lld %-9lld %-9lld\n", ts, "CLOSE", e->timestamp_ns, e->conn_id.pid, e->conn_id.fd,
 			e->conn_id.tsid, e->wr_bytes, e->rd_bytes);
 
 	return 0;
@@ -118,7 +118,7 @@ static int handle_data(void *ctx, void *data, size_t data_sz)
 	tm = localtime(&t);
 	strftime(ts, sizeof(ts), "%H:%M:%S", tm);
 
-	printf("%-8s %-5s %-16lld %-7d %-7d %-7lld %-7s %-7d %-7lld %-16s", ts, "DATA ", e->attr.timestamp_ns, e->attr.conn_id.pid, e->attr.conn_id.fd,
+	printf("%-8s %-5s %-16lld %-7d %-7d %-7lld %-7s %-7d %-7lld %-16s\n", ts, "DATA ", e->attr.timestamp_ns, e->attr.conn_id.pid, e->attr.conn_id.fd,
 			e->attr.conn_id.tsid, (e->attr.direction == kIngress ? "Ingress" : "Egress"), e->attr.msg_size, e->attr.pos, e->msg);
 
 	return 0;
