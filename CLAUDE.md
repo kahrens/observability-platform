@@ -8,7 +8,11 @@ is Fedora 42 (kernel 6.14+), validated against AlmaLinux 9 for RHEL parity.
 
 ## Current state
 Early development. Architecture designed, starter code scaffolded.
-Project as-is builds and runs. The current functionality is a single use case that records new process exec data and emits OTel logs with it.  Code will build and run on x86_64 and arm64. Start here before writing any new code.
+Project as-is builds and runs. Implemented functionality:
+- Process exec events → OTel logs (execve tracepoint)
+- TCP session tracking → OTel trace spans: 4-tuple, role (client/server), RTT estimate,
+  session duration, bytes sent/received in each direction
+Code will build and run on x86_64 and arm64. Start here before writing any new code.
 
 ## Architecture (read docs/architecture.md for full detail and
 docs/platform_architecture_overview.svg)
@@ -29,9 +33,11 @@ Three tiers:
 - Histogram buckets for TCP latency: [0.1,0.5,1,5,10,25,50,100,250,500,1000,2500,5000] ms
 
 ## Correlation key design
-Connections are keyed by {pid u32, fd u32} in BPF maps.
-fd reuse is handled by using open_ts_ns as a generation counter in Go-side maps.
-See docs/ebpf-patterns.md for the full pattern.
+Connections are keyed by sock pointer (u64) in BPF maps — globally unique for the
+connection lifetime, stable from tcp_connect/inet_csk_accept through tcp_close.
+Client pid/comm is captured at fentry/tcp_connect and recovered at ESTABLISHED via
+connect_scratch. Server-side pid is zero at open time (inet_sock_set_state fires in
+softirq); enrich from /proc/net/tcp by local port if needed.
 
 ## Topology and Service Map
 Run eBPF probes on multiple servers.  Ship connection information to trace
@@ -49,21 +55,21 @@ State machine: IDLE → REQ_HEADERS → AWAIT_RESPONSE → RESP_HEADERS → EMIT
 TLS: use uprobe on libssl:SSL_write / SSL_read instead of syscall layer.
 
 ## BPF map conventions
-- active_conns:   HASH  {pid,fd} → conn_info       max 65536
-- inflight_reqs:  HASH  tid → scratch              max 65536
-- buf_args:       HASH  tid → userspace buf ptr    max 65536
-- data_events:    RINGBUF 8MB
-- conn_events:    RINGBUF 1MB
+- active_conns:      HASH  sock_ptr(u64) → conn_open_info   max 65536
+- connect_scratch:   HASH  sock_ptr(u64) → pre_conn         max 4096
+- exec_events:       RINGBUF 1MB
+- conn_events:       RINGBUF 4MB
+(Future payload capture will add buf_args and data_events maps.)
 
 ## Go package layout
 collector/
   main.go              — ring buf event loop + signal handling
-  loader.go            — BPF object load + probe attach
+  loader.go            — BPF object load + probe attach (stub, logic in main.go)
   enricher.go          — /proc + cgroup + k8s metadata
   processors/
-    metrics.go         — TCP latency → OTLP histogram
-    http_trace.go      — HTTP reconstruction → OTLP spans
-    logs.go            — execve/open events → OTLP logs
+    traces.go          — TCP session lifecycle → OTLP spans
+    metrics.go         — TCP latency → OTLP histogram (instruments defined; wiring pending)
+    logs.go            — execve events → OTLP logs
 
 ## Build requirements
 - clang 14+ (for BPF compilation)
