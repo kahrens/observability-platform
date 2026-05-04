@@ -44,7 +44,7 @@ generate: $(PROBES_DIR)/vmlinux.h
 	@echo "Generated BPF Go bindings in $(COLLECTOR_DIR)/"
 
 # Build the collector binary
-build: generate
+build: vmlinux.h generate
 	$(GO) build -o $(BINARY) ./$(COLLECTOR_DIR)/
 	@echo "Built $(BINARY)"
 
